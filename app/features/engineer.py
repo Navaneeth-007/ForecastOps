@@ -2,21 +2,23 @@
 Feature engineering for hourly energy demand forecasting.
 Produces features used by both LightGBM and Prophet models.
 """
+
 import logging
 from pathlib import Path
-from typing import List, Tuple
 
-import pandas as pd
 import numpy as np
+import pandas as pd
+
+from app.config import DATA_DIR
 
 logger = logging.getLogger(__name__)
 
-PROCESSED_DIR = Path("data/processed")
+PROCESSED_DIR = DATA_DIR / "processed"
 
 # Lag windows (hours)
-LAG_HOURS: List[int] = [1, 2, 3, 6, 12, 24, 48, 168]  # 168 = 1 week
+LAG_HOURS: list[int] = [1, 2, 3, 6, 12, 24, 48, 168]  # 168 = 1 week
 # Rolling windows (hours)
-ROLLING_WINDOWS: List[int] = [6, 24, 168]
+ROLLING_WINDOWS: list[int] = [6, 24, 168]
 
 
 def build_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -29,7 +31,7 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # --- Calendar features ---
     df["hour"] = df.index.hour
-    df["dow"] = df.index.dayofweek          # 0=Mon, 6=Sun
+    df["dow"] = df.index.day_of_week  # 0=Mon, 6=Sun
     df["month"] = df.index.month
     df["week_of_year"] = df.index.isocalendar().week.astype(int)
     df["is_weekend"] = (df["dow"] >= 5).astype(int)
@@ -49,37 +51,31 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # --- Rolling statistics ---
     for window in ROLLING_WINDOWS:
-        df[f"rolling_mean_{window}h"] = (
-            df["demand_kwh"].shift(1).rolling(window).mean()
-        )
-        df[f"rolling_std_{window}h"] = (
-            df["demand_kwh"].shift(1).rolling(window).std()
-        )
+        df[f"rolling_mean_{window}h"] = df["demand_kwh"].shift(1).rolling(window).mean()
+        df[f"rolling_std_{window}h"] = df["demand_kwh"].shift(1).rolling(window).std()
 
     # Drop rows where lags/rolling aren't available
     df = df.dropna().reset_index()
-    logger.info(
-        f"Feature engineering complete: {len(df)} rows, "
-        f"{len(df.columns)} columns"
-    )
+    logger.info(f"Feature engineering complete: {len(df)} rows, {len(df.columns)} columns")
     return df
 
 
 def train_test_split(
     df: pd.DataFrame,
     test_weeks: int = 4,
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Chronological split — last `test_weeks` weeks become the hold-out set.
     Never shuffles to preserve temporal integrity.
     """
+    if test_weeks < 1:
+        raise ValueError("test_weeks must be positive")
     cutoff = df["date"].max() - pd.Timedelta(weeks=test_weeks)
     train = df[df["date"] <= cutoff].copy()
     test = df[df["date"] > cutoff].copy()
-    logger.info(
-        f"Train: {len(train)} rows up to {cutoff.date()}  |  "
-        f"Test: {len(test)} rows"
-    )
+    if train.empty or test.empty:
+        raise ValueError("Insufficient history for chronological split")
+    logger.info(f"Train: {len(train)} rows up to {cutoff.date()}  |  Test: {len(test)} rows")
     return train, test
 
 
@@ -92,7 +88,7 @@ def save_features(df: pd.DataFrame, name: str = "features") -> Path:
     return path
 
 
-def feature_columns(df: pd.DataFrame) -> List[str]:
+def feature_columns(df: pd.DataFrame) -> list[str]:
     """Return the list of model input columns (everything except date + target)."""
     exclude = {"date", "demand_kwh"}
     return [c for c in df.columns if c not in exclude]

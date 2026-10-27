@@ -1,9 +1,10 @@
 """Tests for drift detection (PSI)."""
+
 import numpy as np
 import pandas as pd
 import pytest
 
-from app.monitoring.drift import psi, check_drift, compute_prediction_error_drift
+from app.monitoring.drift import check_drift, compute_prediction_error_drift, psi
 
 
 def test_psi_identical_distributions():
@@ -15,7 +16,7 @@ def test_psi_identical_distributions():
 def test_psi_clearly_different_distributions():
     rng = np.random.default_rng(42)
     ref = rng.normal(0, 1, 1000)
-    cur = rng.normal(5, 1, 1000)   # completely different mean
+    cur = rng.normal(5, 1, 1000)  # completely different mean
     score = psi(ref, cur)
     assert score > 0.25, f"Expected high PSI for shifted distribution, got {score}"
 
@@ -52,3 +53,16 @@ def test_prediction_error_drift_stable():
     errors = np.abs(np.random.default_rng(0).normal(0, 1, 500))
     result = compute_prediction_error_drift(errors, errors)
     assert result["degraded"] is False
+
+
+def test_constant_reference_detects_shift():
+    assert psi(np.ones(100), np.full(100, 100.0)) > 0.25
+
+
+def test_tail_mass_is_not_discarded():
+    assert psi(np.arange(100), np.full(100, 10000)) > 0.25
+
+
+def test_empty_samples_are_rejected():
+    with pytest.raises(ValueError):
+        psi(np.array([]), np.ones(100))

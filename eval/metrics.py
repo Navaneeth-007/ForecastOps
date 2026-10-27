@@ -2,7 +2,6 @@
 Evaluation metrics for forecasting models.
 Produces a comparison table: Prophet vs LightGBM across all key metrics.
 """
-from typing import Dict
 
 import numpy as np
 import pandas as pd
@@ -42,7 +41,7 @@ def evaluate_model(
     y_lower: np.ndarray | None = None,
     y_upper: np.ndarray | None = None,
     model_name: str = "model",
-) -> Dict[str, float]:
+) -> dict[str, float]:
     result = {
         "model": model_name,
         "mae": round(mae(y_true, y_pred), 4),
@@ -55,7 +54,7 @@ def evaluate_model(
     return result
 
 
-def comparison_table(results: list[Dict]) -> pd.DataFrame:
+def comparison_table(results: list[dict]) -> pd.DataFrame:
     """Format a list of evaluate_model dicts into a clean comparison table."""
     df = pd.DataFrame(results).set_index("model")
     return df.sort_values("rmse")

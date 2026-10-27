@@ -1,0 +1,40 @@
+x-common: &common
+  build: .
+  environment: &environment
+    DATA_DIR: /state/data
+    MLFLOW_TRACKING_URI: sqlite:////state/mlflow.db
+    FORECASTOPS_API_KEY: ${FORECASTOPS_API_KEY:-}
+  volumes:
+    - forecastops:/state
+  working_dir: /state
+services:
+  train:
+    <<: *common
+    command: python -m scripts.train
+  api:
+    <<: *common
+    environment:
+      <<: *environment
+      SCHEDULER_ENABLED: "true"
+    command: uvicorn app.main:app --app-dir /app --host 0.0.0.0 --port 8000 --workers 1
+    ports: ["127.0.0.1:8000:8000"]
+    depends_on:
+      train:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+  dashboard:
+    <<: *common
+    environment:
+      <<: *environment
+      API_URL: http://api:8000
+    command: streamlit run /app/frontend/streamlit_app.py --server.address=0.0.0.0
+    ports: ["127.0.0.1:8501:8501"]
+    depends_on:
+      api:
+        condition: service_healthy
+volumes:
+  forecastops:

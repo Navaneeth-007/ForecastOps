@@ -2,19 +2,20 @@
 Prophet model trainer with MLflow tracking.
 Prophet is the classical baseline — interpretable, requires no feature engineering.
 """
+
 import logging
-from typing import Dict, Any
+from typing import Any
 
 import mlflow
 import mlflow.pyfunc
-import pandas as pd
 import numpy as np
+import pandas as pd
 from prophet import Prophet
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 logger = logging.getLogger(__name__)
 
-PROPHET_PARAMS: Dict[str, Any] = {
+PROPHET_PARAMS: dict[str, Any] = {
     "yearly_seasonality": True,
     "weekly_seasonality": True,
     "daily_seasonality": True,
@@ -41,7 +42,7 @@ def train_and_log(
     train: pd.DataFrame,
     test: pd.DataFrame,
     experiment_name: str = "ForecastOps",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Train Prophet, log params + metrics to MLflow, return run metadata.
     Expects train/test to have 'date' and 'demand_kwh' columns.
@@ -49,12 +50,8 @@ def train_and_log(
     mlflow.set_experiment(experiment_name)
 
     # Prophet expects ds / y column names
-    train_prophet = train[["date", "demand_kwh"]].rename(
-        columns={"date": "ds", "demand_kwh": "y"}
-    )
-    test_prophet = test[["date", "demand_kwh"]].rename(
-        columns={"date": "ds", "demand_kwh": "y"}
-    )
+    train_prophet = train[["date", "demand_kwh"]].rename(columns={"date": "ds", "demand_kwh": "y"})
+    test_prophet = test[["date", "demand_kwh"]].rename(columns={"date": "ds", "demand_kwh": "y"})
 
     with mlflow.start_run(run_name="prophet_baseline") as run:
         mlflow.log_params(PROPHET_PARAMS)
@@ -79,8 +76,9 @@ def train_and_log(
 
         # Log model as pyfunc
         wrapped = ProphetWrapper(m)
-        mlflow.pyfunc.log_model(
-            artifact_path="model",
+        logged_model = mlflow.pyfunc.log_model(
+            name="model",
+            input_example=test_prophet[["ds"]].head(3),
             python_model=wrapped,
         )
 
@@ -89,6 +87,7 @@ def train_and_log(
     return {
         "model_name": "prophet",
         "run_id": run_id,
+        "model_uri": logged_model.model_uri,
         "mae": mae,
         "rmse": rmse,
         "mape": mape,

@@ -1,0 +1,16 @@
+FROM python:3.11-slim
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/app
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY requirements.txt requirements.lock ./
+RUN pip install --no-cache-dir -r requirements.lock
+COPY . .
+RUN pip install --no-deps .
+RUN useradd --create-home forecastops && mkdir -p /state && chown -R forecastops:forecastops /app /state
+USER forecastops
+# Train only synthetic demo data at build time, in the SAME paths used at runtime.
+# Model registry and artifacts are bundled in the image; no paid disk is needed.
+ENV DATA_DIR=/app/data MLFLOW_TRACKING_URI=sqlite:////app/mlflow.db OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
+RUN python -m scripts.train
+EXPOSE 10000
+CMD ["python", "-m", "scripts.serve_demo"]

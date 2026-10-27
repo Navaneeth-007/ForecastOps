@@ -6,8 +6,9 @@ PSI thresholds (industry standard):
   0.10–0.25 → moderate shift — monitor closely
   > 0.25  → significant drift — consider retraining
 """
+
 import logging
-from typing import Dict, Any
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -24,11 +25,19 @@ def psi(expected: np.ndarray, actual: np.ndarray, bins: int = PSI_BINS) -> float
     Compute the Population Stability Index between two distributions.
     Both arrays should be 1-D numeric.
     """
+    expected, actual = np.asarray(expected), np.asarray(actual)
+    if bins < 2 or not expected.size or not actual.size:
+        raise ValueError("PSI requires nonempty samples and at least two bins")
+    if not np.isfinite(expected).all() or not np.isfinite(actual).all():
+        raise ValueError("PSI requires finite numeric samples")
     # Compute bin edges from expected distribution
     breakpoints = np.percentile(expected, np.linspace(0, 100, bins + 1))
     breakpoints = np.unique(breakpoints)  # remove duplicates
     if len(breakpoints) < 2:
-        return 0.0
+        center = float(expected[0])
+        breakpoints = np.array([-np.inf, center - 1e-6, center + 1e-6, np.inf])
+    else:
+        breakpoints = np.concatenate(([-np.inf], breakpoints[1:-1], [np.inf]))
 
     def _bin_pct(arr: np.ndarray) -> np.ndarray:
         counts, _ = np.histogram(arr, bins=breakpoints)
@@ -45,14 +54,14 @@ def check_drift(
     reference: pd.DataFrame,
     current: pd.DataFrame,
     target_col: str = "demand_kwh",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Compare feature distributions between a reference window and
     the current incoming window.
 
     Returns a dict with per-feature PSI scores and overall alert flag.
     """
-    report: Dict[str, Any] = {"features": {}, "alert": False, "retraining_recommended": False}
+    report: dict[str, Any] = {"features": {}, "alert": False, "retraining_recommended": False}
 
     shared_cols = [c for c in reference.columns if c in current.columns and c != "date"]
 
@@ -63,8 +72,10 @@ def check_drift(
             continue
         score = psi(ref_vals, cur_vals)
         level = (
-            "ok" if score < PSI_WARN_THRESHOLD
-            else "warn" if score < PSI_ALERT_THRESHOLD
+            "ok"
+            if score < PSI_WARN_THRESHOLD
+            else "warn"
+            if score < PSI_ALERT_THRESHOLD
             else "alert"
         )
         report["features"][col] = {"psi": score, "level": level}
@@ -78,14 +89,14 @@ def check_drift(
     )
     report["target_psi"] = target_psi
     report["target_level"] = (
-        "ok" if target_psi < PSI_WARN_THRESHOLD
-        else "warn" if target_psi < PSI_ALERT_THRESHOLD
+        "ok"
+        if target_psi < PSI_WARN_THRESHOLD
+        else "warn"
+        if target_psi < PSI_ALERT_THRESHOLD
         else "alert"
     )
 
-    report["retraining_recommended"] = (
-        report["alert"] or report["target_level"] == "alert"
-    )
+    report["retraining_recommended"] = report["alert"] or report["target_level"] == "alert"
 
     n_alerts = sum(1 for v in report["features"].values() if v["level"] == "alert")
     logger.info(
@@ -98,7 +109,7 @@ def check_drift(
 def compute_prediction_error_drift(
     baseline_errors: np.ndarray,
     current_errors: np.ndarray,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Track whether prediction errors are growing (performance drift).
     baseline_errors and current_errors are arrays of |y_true - y_pred|.

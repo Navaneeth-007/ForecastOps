@@ -2,21 +2,21 @@
 Lightweight data validation — checks completeness, outliers, and gaps.
 Logs warnings rather than hard-failing so the pipeline stays robust.
 """
+
 import logging
-from typing import Dict, Any
+from typing import Any
 
 import pandas as pd
-import numpy as np
 
 logger = logging.getLogger(__name__)
 
 
-def run_checks(df: pd.DataFrame) -> Dict[str, Any]:
+def run_checks(df: pd.DataFrame) -> dict[str, Any]:
     """
     Run a suite of data quality checks.
     Returns a dict of results (pass/fail + details) suitable for MLflow logging.
     """
-    results: Dict[str, Any] = {}
+    results: dict[str, Any] = {}
 
     # 1. Null rate
     null_rate = df["demand_kwh"].isna().mean()
@@ -47,7 +47,7 @@ def run_checks(df: pd.DataFrame) -> Dict[str, Any]:
     results["std_demand"] = round(df["demand_kwh"].std(), 2)
 
     # 5. Overall pass/fail
-    results["validation_passed"] = (
+    results["validation_passed"] = bool(
         null_rate <= 0.01 and gaps == 0 and outliers <= len(df) * 0.01
     )
     logger.info(f"Validation complete: {results}")
