@@ -1,0 +1,13 @@
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+select = ["E", "F", "W", "I", "UP"]
+ignore = ["E501"]  # line too long — handled by formatter
+exclude = ["notebooks/", ".venv/"]
+
+[tool.ruff.isort]
+known-first-party = ["app", "eval"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
