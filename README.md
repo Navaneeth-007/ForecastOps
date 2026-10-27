@@ -1,5 +1,7 @@
 # ForecastOps ⚡
 
+[**Live demo**](https://forecastops.onrender.com) · [![CI](https://github.com/Navaneeth-007/ForecastOps/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Navaneeth-007/ForecastOps/actions/workflows/ci.yml)
+
 **An end-to-end energy forecasting system that trains competing models, tracks experiments, promotes a champion, and serves monitored forecasts through an API and dashboard.**
 
 Built to demonstrate Python engineering, time-series modeling, experiment tracking, API design, testing and reproducible deployment. The default data is explicitly synthetic, so anyone can run the complete project without credentials or downloads.

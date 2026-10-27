@@ -1,5 +1,9 @@
 # Free Render demo
 
+Live: https://forecastops.onrender.com
+
+Render service: `srv-dbg7kvnb9u1s73cglfg0` (Singapore, free compute plan).
+
 The public portfolio demo uses one free Docker web service. `Dockerfile.render` trains the seeded two-year dataset during the build and bundles the SQLite registry, model artifacts and CSV into the image at `/app`. `scripts/serve_demo.py` starts an internal API on loopback, waits for model readiness, then starts the public Streamlit dashboard on `$PORT`. If either process fails, both stop so Render can restart the instance.
 
 Public retraining and scheduled training are disabled by the launcher. Run the full Compose stack locally to demonstrate those operations. No LLM, hosted inference API or paid disk is required. The dashboard uses real trained forecasting models.
