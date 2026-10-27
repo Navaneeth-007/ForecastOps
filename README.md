@@ -6,6 +6,8 @@ Built to demonstrate Python engineering, time-series modeling, experiment tracki
 
 ![ForecastOps demand dashboard](docs/images/dashboard.jpg)
 
+[Watch the animated demo](docs/images/demo.gif) · [Demo walkthrough](docs/DEMO.md)
+
 ## Models, not LLMs
 
 ForecastOps uses **LightGBM** (gradient-boosted decision trees) and **Prophet** (trend and seasonal forecasting). Both train locally on hourly demand. No large language model, OpenAI API key, or paid inference service is used.
