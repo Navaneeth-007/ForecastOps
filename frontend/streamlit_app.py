@@ -9,6 +9,7 @@ import streamlit as st
 from dotenv import load_dotenv
 
 load_dotenv()
+DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
 API_URL = os.getenv("API_URL", "http://localhost:8000").rstrip("/")
 st.set_page_config(page_title="ForecastOps | Energy Intelligence", page_icon="⚡", layout="wide")
 
@@ -40,7 +41,9 @@ with st.sidebar:
     st.caption(
         "Default demo uses seeded synthetic data. Forecast dates follow the latest observation, not today's clock."
     )
-    st.caption("Interactive API docs are available on the API host at /docs.")
+    st.caption("LightGBM and Prophet are forecasting models. No LLM or paid inference API is used.")
+    if not DEMO_MODE:
+        st.caption("Interactive API docs are available on the API host at /docs.")
 
 tab1, tab2, tab3, tab4 = st.tabs(["Forecast", "Model registry", "Drift monitor", "Retraining"])
 with tab1:
@@ -84,6 +87,7 @@ with tab1:
             xaxis_title="Time (UTC)",
             yaxis_title="Hourly demand (kWh)",
             margin={"t": 20},
+            legend={"orientation": "h", "x": 0, "y": 1.12},
         )
         st.plotly_chart(fig, use_container_width=True)
         st.caption(
@@ -146,15 +150,22 @@ with tab4:
     st.info(
         "Trains both candidates and promotes the lower-RMSE candidate in this run. This operation may take several minutes."
     )
-    secret = st.text_input("Retraining API key", type="password")
-    if st.button("Start training", type="primary", disabled=not secret):
-        with st.spinner("Training models and recording experiments…"):
-            try:
-                result = api("/retrain", method="post", headers={"X-API-Key": secret}, timeout=900)
-                st.success("Training complete. Champion updated.")
-                st.json(result["result"]["winner"])
-            except (requests.RequestException, RuntimeError) as exc:
-                st.error(str(exc))
+    if DEMO_MODE:
+        st.caption(
+            "This public demo is read-only. Models train during deployment; run the local Docker stack to explore authenticated retraining."
+        )
+    else:
+        secret = st.text_input("Retraining API key", type="password")
+        if st.button("Start training", type="primary", disabled=not secret):
+            with st.spinner("Training models and recording experiments…"):
+                try:
+                    result = api(
+                        "/retrain", method="post", headers={"X-API-Key": secret}, timeout=900
+                    )
+                    st.success("Training complete. Champion updated.")
+                    st.json(result["result"]["winner"])
+                except (requests.RequestException, RuntimeError) as exc:
+                    st.error(str(exc))
     if st.button("Refresh training status"):
         try:
             st.json(api("/scheduler/status", timeout=10))

@@ -4,6 +4,8 @@
 
 Built to demonstrate Python engineering, time-series modeling, experiment tracking, API design, testing and reproducible deployment. The default data is explicitly synthetic, so anyone can run the complete project without credentials or downloads.
 
+![ForecastOps demand dashboard](docs/images/dashboard.jpg)
+
 ## Models, not LLMs
 
 ForecastOps uses **LightGBM** (gradient-boosted decision trees) and **Prophet** (trend and seasonal forecasting). Both train locally on hourly demand. No large language model, OpenAI API key, or paid inference service is used.

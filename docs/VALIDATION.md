@@ -10,6 +10,10 @@ Validated locally on 27 October 2026 with Python 3.11 on macOS ARM64, using the 
 - The default two-year training command completed successfully. Benchmark values and dataset checksum are in `benchmark.json`.
 - The Streamlit dashboard loaded against the running API and generated a 24-hour forecast with model metadata, demand metrics and uncertainty chart.
 
-The Docker daemon was not running on the validation machine, so a local image build and Compose startup were not executed. The repository includes a Linux container build job and full test job in GitHub Actions; their remote results are not yet verified.
+On the follow-up run, GitHub Actions successfully built both the standard and Render demo images on Linux. The demo passed its health check and served a 168-hour forecast under a 512 MB container memory limit. The Linux lint, formatting and full test job passed as well.
+
+Verification run: https://github.com/Navaneeth-007/ForecastOps/actions/runs/40486700477
+
+The hosted-demo supervisor also passed a local startup check: dashboard health returned 200, and the internal API returned real 24-hour predictions. Local Docker export was blocked by exhausted disk space and Docker Desktop subsequently failing to restart; the successful Linux CI run verifies the container path independently.
 
 These checks validate the portfolio application. They do not constitute load testing, real-world forecasting validation or a high-availability deployment certification. Dependency deprecation warnings from upstream libraries remain visible during testing.

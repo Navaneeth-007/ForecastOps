@@ -14,6 +14,7 @@ def main():
     env = {
         **os.environ,
         "SCHEDULER_ENABLED": "false",
+        "DEMO_MODE": "true",
         "FORECASTOPS_API_KEY": "",
         "API_URL": f"http://127.0.0.1:{api_port}",
         "OMP_NUM_THREADS": "1",
