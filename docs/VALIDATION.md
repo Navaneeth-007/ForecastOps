@@ -21,3 +21,5 @@ These checks validate the portfolio application. They do not constitute load tes
 ## Hosted verification
 
 Render deployment `dep-dbg7lobrjlhs73cspifg` reached `live` on 27 October 2026. The public dashboard at https://forecastops.onrender.com loaded its built-in LightGBM champion, generated a 24-hour forecast through the internal API, and returned `ok` from `/_stcore/health`. The public UI has no retraining secret input or start-training control.
+
+The maximum 168-hour forecast was also generated successfully through the live browser UI. A screenshot is saved in [live-demo.jpg](images/live-demo.jpg). Free-plan CPU limits make longer horizons slower than the local demo.
