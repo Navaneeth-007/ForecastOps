@@ -1,42 +1,47 @@
 name: CI
-
 on:
   push:
-    branches: [main, develop]
   pull_request:
-    branches: [main]
-
+permissions:
+  contents: read
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.11"]
-
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: '3.11'
           cache: pip
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Lint with Ruff
-        run: ruff check app/ eval/ scripts/ tests/
-
-      - name: Run tests with coverage
-        run: |
-          pytest tests/ -v --cov=app --cov-report=term-missing --cov-fail-under=70
-
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+      - run: sudo apt-get update && sudo apt-get install -y libgomp1
+      - run: python -m pip install -r requirements.lock
+      - run: python -m pip install --no-deps --no-build-isolation -e .
+      - run: ruff check . && ruff format --check .
+      - run: python -m pytest --cov=app --cov-report=xml --cov-report=term-missing --cov-fail-under=75
+      - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: coverage-report
-          path: .coverage
+          name: coverage
+          path: coverage.xml
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose config --quiet
+      - run: docker build -t forecastops:ci .
+      - run: docker build -f Dockerfile.render -t forecastops-demo:ci .
+      - name: Smoke test the hosted demo
+        run: |
+          docker run -d --name demo --memory=512m -p 127.0.0.1:10000:10000 forecastops-demo:ci
+          for attempt in $(seq 1 90); do
+            if curl -fsS http://localhost:10000/_stcore/health; then break; fi
+            sleep 2
+          done
+          curl -fsS http://localhost:10000/_stcore/health
+          docker exec demo python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/forecast?hours=168', timeout=120)"
+          docker stats --no-stream demo
+      - name: Container logs
+        if: always()
+        run: docker logs demo || true

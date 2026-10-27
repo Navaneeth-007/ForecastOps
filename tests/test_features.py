@@ -1,10 +1,10 @@
 """Tests for feature engineering pipeline."""
-import numpy as np
+
 import pandas as pd
 import pytest
 
+from app.features.engineer import build_features, feature_columns, train_test_split
 from app.ingestion.data_loader import _generate_synthetic, validate_schema
-from app.features.engineer import build_features, train_test_split, feature_columns
 
 
 @pytest.fixture

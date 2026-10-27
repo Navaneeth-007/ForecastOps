@@ -1,0 +1,37 @@
+{
+  "dataset": {
+    "rows": 17520,
+    "start": "2022-01-01T00:00:00",
+    "end": "2023-12-31T23:00:00",
+    "sha256": "a1abec433ca6a121cd61a71353da1e1e10d59ca1ac5a4d6e490e2a68ff050631"
+  },
+  "split": {
+    "train_rows": 16680,
+    "test_rows": 672,
+    "test_start": "2023-12-04T00:00:00",
+    "test_end": "2023-12-31T23:00:00"
+  },
+  "baseline": {
+    "model": "seasonal_naive_weekly",
+    "mae": 4.8098,
+    "rmse": 5.9843,
+    "mape_%": 3.5715,
+    "smape_%": 3.6444
+  },
+  "candidates": [
+    {
+      "model_name": "prophet",
+      "mae": 3.0036015231656923,
+      "rmse": 3.7941663310777183,
+      "mape": 2.2627675549755697
+    },
+    {
+      "model_name": "lightgbm",
+      "mae": 2.5291983844787556,
+      "rmse": 3.18839028914444,
+      "mape": 1.8919099651538385
+    }
+  ],
+  "winner": "lightgbm",
+  "protocol": "Four-week chronological holdout; recursive LightGBM; synthetic data seed 42"
+}

@@ -1,164 +1,173 @@
-"""
-ForecastOps — Streamlit Dashboard
+"""ForecastOps operator dashboard; API is the single source of model state."""
 
-Tabs:
-  1. Forecast — interactive forecast chart with confidence bands
-  2. Model Registry — comparison table of all registered versions
-  3. Drift Monitor — PSI heatmap per feature
-  4. Retrain — trigger retraining manually
-"""
 import os
-import time
 
 import pandas as pd
+import plotly.graph_objects as go
 import requests
 import streamlit as st
+from dotenv import load_dotenv
 
-API_URL = os.getenv("API_URL", "http://localhost:8000")
-
-st.set_page_config(
-    page_title="ForecastOps",
-    page_icon="⚡",
-    layout="wide",
-)
-
-st.title("⚡ ForecastOps — Energy Demand Forecasting")
-st.caption("End-to-end MLOps pipeline · Prophet vs LightGBM · MLflow Model Registry")
-
-tab1, tab2, tab3, tab4 = st.tabs(["📈 Forecast", "🏆 Model Registry", "🔍 Drift Monitor", "🔁 Retrain"])
+load_dotenv()
+DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
+API_URL = os.getenv("API_URL", "http://localhost:8000").rstrip("/")
+st.set_page_config(page_title="ForecastOps | Energy Intelligence", page_icon="⚡", layout="wide")
 
 
-# ─── Tab 1: Forecast ──────────────────────────────────────────────────────────
-with tab1:
-    st.subheader("Generate Forecast")
-    hours = st.slider("Forecast horizon (hours)", min_value=1, max_value=168, value=24, step=1)
-    if st.button("Run Forecast", type="primary"):
-        with st.spinner("Fetching forecast…"):
-            try:
-                resp = requests.get(f"{API_URL}/forecast", params={"hours": hours}, timeout=60)
-                resp.raise_for_status()
-                data = resp.json()
-                df = pd.DataFrame(data["forecast"])
-                df["date"] = pd.to_datetime(df["date"])
-                model_info = data.get("model", {})
-
-                col1, col2, col3 = st.columns(3)
-                col1.metric("Model", model_info.get("model_type", "—").upper())
-                col2.metric("RMSE (test)", f"{model_info.get('rmse', 0):.3f}")
-                col3.metric("MAPE (test)", f"{model_info.get('mape', 0):.2f}%")
-
-                # Forecast chart
-                import plotly.graph_objects as go
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(
-                    x=df["date"], y=df["yhat"],
-                    name="Forecast", line=dict(color="#2563eb", width=2)
-                ))
-                fig.add_trace(go.Scatter(
-                    x=pd.concat([df["date"], df["date"].iloc[::-1]]),
-                    y=pd.concat([df["yhat_upper"], df["yhat_lower"].iloc[::-1]]),
-                    fill="toself", fillcolor="rgba(37,99,235,0.12)",
-                    line=dict(color="rgba(0,0,0,0)"),
-                    name="95% PI",
-                ))
-                fig.update_layout(
-                    title=f"{hours}-hour Energy Demand Forecast",
-                    xaxis_title="Time",
-                    yaxis_title="Demand (kWh)",
-                    hovermode="x unified",
-                    height=400,
-                )
-                st.plotly_chart(fig, use_container_width=True)
-                st.dataframe(df, use_container_width=True)
-            except Exception as e:
-                st.error(f"Forecast failed: {e}")
+def api(path, *, method="get", **kwargs):
+    response = requests.request(method, f"{API_URL}{path}", **kwargs)
+    if not response.ok:
+        try:
+            message = response.json().get("detail", response.reason)
+        except ValueError:
+            message = response.reason
+        raise RuntimeError(f"{response.status_code}: {message}")
+    return response.json()
 
 
-# ─── Tab 2: Model Registry ────────────────────────────────────────────────────
-with tab2:
-    st.subheader("Registered Model Versions")
-    if st.button("Refresh"):
-        pass
+st.title("⚡ ForecastOps")
+st.caption("ENERGY INTELLIGENCE / MODEL OPERATIONS")
+st.markdown("Forecast hourly demand, inspect model decisions, and monitor distribution changes.")
+with st.sidebar:
+    st.header("Control room")
+    st.caption("Prophet · LightGBM · MLflow · FastAPI")
     try:
-        resp = requests.get(f"{API_URL}/model/versions", timeout=10)
-        resp.raise_for_status()
-        versions = resp.json().get("versions", [])
-        if versions:
-            df_v = pd.DataFrame(versions)
-            # Highlight Production row
-            def highlight_prod(row):
-                return ["background-color: #dcfce7" if row["stage"] == "Production" else "" for _ in row]
-            st.dataframe(
-                df_v.style.apply(highlight_prod, axis=1),
-                use_container_width=True,
+        info = api("/model/info", timeout=10)
+        st.success(f"Champion: {info['model_type'].upper()} · v{info['version']}")
+        st.caption(f"Run {info['run_id'][:12]}")
+    except (requests.RequestException, RuntimeError) as exc:
+        st.warning(f"Model unavailable. Run training first. {exc}")
+    st.divider()
+    st.caption(
+        "Default demo uses seeded synthetic data. Forecast dates follow the latest observation, not today's clock."
+    )
+    st.caption("LightGBM and Prophet are forecasting models. No LLM or paid inference API is used.")
+    if not DEMO_MODE:
+        st.caption("Interactive API docs are available on the API host at /docs.")
+
+tab1, tab2, tab3, tab4 = st.tabs(["Forecast", "Model registry", "Drift monitor", "Retraining"])
+with tab1:
+    st.subheader("Demand outlook")
+    hours = st.select_slider("Forecast horizon", options=[1, 6, 12, 24, 48, 72, 168], value=24)
+    if st.button("Generate forecast", type="primary"):
+        with st.spinner("Generating forecast…"):
+            try:
+                st.session_state.forecast = api("/forecast", params={"hours": hours}, timeout=120)
+            except (requests.RequestException, RuntimeError) as exc:
+                st.error(str(exc))
+    data = st.session_state.get("forecast")
+    if data:
+        df = pd.DataFrame(data["forecast"])
+        df["date"] = pd.to_datetime(df["date"])
+        info = data["model"]
+        a, b, c = st.columns(3)
+        a.metric("Holdout RMSE", f"{info['rmse']:.2f} kWh")
+        b.metric("Average forecast", f"{df.yhat.mean():.1f} kWh")
+        c.metric("Peak forecast", f"{df.yhat.max():.1f} kWh")
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=df.date, y=df.yhat_upper, line={"width": 0}, showlegend=False))
+        fig.add_trace(
+            go.Scatter(
+                x=df.date,
+                y=df.yhat_lower,
+                fill="tonexty",
+                fillcolor="rgba(14,165,233,0.15)",
+                line={"width": 0},
+                name="Uncertainty band",
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=df.date, y=df.yhat, name="Demand forecast", line={"color": "#0ea5e9", "width": 3}
+            )
+        )
+        fig.update_layout(
+            height=430,
+            hovermode="x unified",
+            xaxis_title="Time (UTC)",
+            yaxis_title="Hourly demand (kWh)",
+            margin={"t": 20},
+            legend={"orientation": "h", "x": 0, "y": 1.12},
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        st.caption(
+            f"{data['horizon_hours']}-hour forecast · model version {info['version']} · "
+            "LightGBM bands are heuristic; Prophet bands are model-based estimates."
+        )
+        st.download_button(
+            "Download forecast CSV", df.to_csv(index=False), "forecast.csv", "text/csv"
+        )
+        with st.expander("Inspect predictions"):
+            st.dataframe(df, use_container_width=True, hide_index=True)
+    else:
+        st.info("Choose a horizon and generate a forecast to explore demand and uncertainty.")
+
+with tab2:
+    st.subheader("Versioned model history")
+    st.caption(
+        "The champion alias routes new requests to a versioned artifact. Previous versions remain available for rollback."
+    )
+    if st.button("Load model history"):
+        try:
+            versions = api("/model/versions", timeout=15)["versions"]
+            st.session_state.versions = versions
+        except (requests.RequestException, RuntimeError) as exc:
+            st.error(str(exc))
+    versions = st.session_state.get("versions", [])
+    if versions:
+        st.dataframe(pd.DataFrame(versions), use_container_width=True, hide_index=True)
+    else:
+        st.info("Load history after the first training run.")
+
+with tab3:
+    st.subheader("Distribution health")
+    st.caption(
+        "PSI compares the last four weeks with the preceding four weeks. Seasonality can cause shifts without model degradation."
+    )
+    if st.button("Check distributions", type="primary"):
+        try:
+            st.session_state.drift = api("/drift", timeout=30)
+        except (requests.RequestException, RuntimeError) as exc:
+            st.error(str(exc))
+    report = st.session_state.get("drift")
+    if report:
+        st.metric("Demand PSI", f"{report['target_psi']:.4f}")
+        if report["retraining_recommended"]:
+            st.warning(
+                "Significant distribution shift. Investigate before deciding whether to retrain."
             )
         else:
-            st.info("No registered models yet. Run training first.")
-    except Exception as e:
-        st.error(f"Could not fetch model versions: {e}")
+            st.success("No significant distribution shift detected.")
+        st.dataframe(
+            pd.DataFrame([{"feature": key, **value} for key, value in report["features"].items()]),
+            use_container_width=True,
+            hide_index=True,
+        )
+    st.caption("PSI < 0.10: stable · 0.10–0.25: monitor · ≥ 0.25: investigate")
 
-
-# ─── Tab 3: Drift Monitor ─────────────────────────────────────────────────────
-with tab3:
-    st.subheader("Data Drift — PSI Check")
-    st.caption("Compares last 4-week window against the preceding reference period.")
-    if st.button("Run Drift Check", type="primary"):
-        with st.spinner("Checking drift…"):
-            try:
-                resp = requests.get(f"{API_URL}/drift", timeout=30)
-                resp.raise_for_status()
-                report = resp.json()
-
-                target_psi = report.get("target_psi", 0)
-                level = report.get("target_level", "ok")
-                color = {"ok": "green", "warn": "orange", "alert": "red"}.get(level, "gray")
-                st.markdown(f"**Target PSI:** `{target_psi:.4f}` — :{color}[{level.upper()}]")
-
-                if report.get("retraining_recommended"):
-                    st.warning("⚠️ Retraining recommended — significant drift detected.")
-                else:
-                    st.success("✅ No significant drift detected.")
-
-                # Feature PSI table
-                features = report.get("features", {})
-                if features:
-                    feat_df = pd.DataFrame([
-                        {"feature": k, "psi": v["psi"], "level": v["level"]}
-                        for k, v in features.items()
-                    ]).sort_values("psi", ascending=False)
-                    st.dataframe(feat_df, use_container_width=True)
-            except Exception as e:
-                st.error(f"Drift check failed: {e}")
-
-
-# ─── Tab 4: Retrain ───────────────────────────────────────────────────────────
 with tab4:
-    st.subheader("Manual Retraining")
-    st.info("Triggers a full pipeline run: ingest → feature engineer → train both models → compare → promote winner.")
-
-    col_a, col_b = st.columns(2)
-    with col_a:
-        if st.button("🚀 Trigger Retraining Now", type="primary"):
-            with st.spinner("Retraining… this may take a few minutes."):
+    st.subheader("Train, compare, promote")
+    st.info(
+        "Trains both candidates and promotes the lower-RMSE candidate in this run. This operation may take several minutes."
+    )
+    if DEMO_MODE:
+        st.caption(
+            "This public demo is read-only. Models train during deployment; run the local Docker stack to explore authenticated retraining."
+        )
+    else:
+        secret = st.text_input("Retraining API key", type="password")
+        if st.button("Start training", type="primary", disabled=not secret):
+            with st.spinner("Training models and recording experiments…"):
                 try:
-                    resp = requests.post(f"{API_URL}/retrain", timeout=300)
-                    resp.raise_for_status()
-                    result = resp.json().get("result", {})
-                    winner = result.get("winner", {})
-                    st.success(
-                        f"✅ Done! Winner: **{winner.get('model_name', '?').upper()}** "
-                        f"— RMSE={winner.get('rmse', 0):.4f}"
+                    result = api(
+                        "/retrain", method="post", headers={"X-API-Key": secret}, timeout=900
                     )
-                    st.json(winner)
-                except Exception as e:
-                    st.error(f"Retraining failed: {e}")
-
-    with col_b:
-        st.markdown("**Scheduler Status**")
+                    st.success("Training complete. Champion updated.")
+                    st.json(result["result"]["winner"])
+                except (requests.RequestException, RuntimeError) as exc:
+                    st.error(str(exc))
+    if st.button("Refresh training status"):
         try:
-            resp = requests.get(f"{API_URL}/scheduler/status", timeout=5)
-            resp.raise_for_status()
-            status = resp.json()
-            st.json(status)
-        except Exception as e:
-            st.error(f"Could not fetch scheduler status: {e}")
+            st.json(api("/scheduler/status", timeout=10))
+        except (requests.RequestException, RuntimeError) as exc:
+            st.error(str(exc))

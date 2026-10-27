@@ -3,15 +3,18 @@ Data loader for UCI-style hourly energy demand.
 Generates synthetic data locally if the real CSV is not present,
 so the project is fully self-contained out of the box.
 """
+
 import logging
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
+from app.config import DATA_DIR
+
 logger = logging.getLogger(__name__)
 
-RAW_DATA_PATH = Path("data/raw/energy.csv")
+RAW_DATA_PATH = DATA_DIR / "raw/energy.csv"
 PROCESSED_PATH = Path("data/processed/energy_clean.parquet")
 
 
@@ -42,7 +45,7 @@ def _generate_synthetic(n_days: int = 730) -> pd.DataFrame:
     dates = pd.date_range("2022-01-01", periods=periods, freq="h")
 
     hour = dates.hour.values
-    dow = dates.dayofweek.values
+    dow = dates.day_of_week.values
     month = dates.month.values
 
     daily = 20 * np.sin(2 * np.pi * (hour - 6) / 24) + 20
@@ -60,12 +63,14 @@ def validate_schema(df: pd.DataFrame) -> pd.DataFrame:
     missing = required - set(df.columns)
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
-    df["date"] = pd.to_datetime(df["date"])
-    df["demand_kwh"] = df["demand_kwh"].astype(float)
-    before = len(df)
-    df = df.dropna(subset=["demand_kwh"]).reset_index(drop=True)
-    logger.info(
-        f"Schema OK — {len(df)} rows kept ({before - len(df)} dropped), "
-        f"{df['date'].min()} → {df['date'].max()}"
-    )
+    df = df[["date", "demand_kwh"]].copy()
+    df["date"] = pd.to_datetime(df["date"], utc=True).dt.tz_localize(None)
+    df["demand_kwh"] = pd.to_numeric(df["demand_kwh"], errors="raise").astype(float)
+    if df.empty or df.isna().any().any():
+        raise ValueError("Data must be nonempty with no missing timestamps or demand")
+    if not np.isfinite(df["demand_kwh"]).all() or (df["demand_kwh"] < 0).any():
+        raise ValueError("Demand must be finite and nonnegative")
+    df = df.sort_values("date").reset_index(drop=True)
+    if df.date.duplicated().any() or not df.date.diff().dropna().eq(pd.Timedelta(hours=1)).all():
+        raise ValueError("Timestamps must be unique, contiguous hourly observations")
     return df

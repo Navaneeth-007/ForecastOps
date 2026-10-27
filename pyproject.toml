@@ -1,13 +1,36 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "forecastops"
+version = "1.0.0"
+description = "Reproducible energy forecasting with experiment tracking and monitored serving"
+requires-python = ">=3.11,<3.13"
+dynamic = ["dependencies"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.setuptools.packages.find]
+include = ["app*", "eval*", "scripts*"]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-cov", "ruff", "httpx"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP"]
 ignore = ["E501"]  # line too long — handled by formatter
-exclude = ["notebooks/", ".venv/"]
 
-[tool.ruff.isort]
+
+[tool.ruff.lint.isort]
 known-first-party = ["app", "eval"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
+markers = ["integration: real model training and MLflow registry round trip"]
